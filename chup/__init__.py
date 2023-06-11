@@ -51,10 +51,9 @@ def full_local_backup(config: Config, target_dir: str) -> tuple[str, str]:
         backup_dir = Dir(config.dir_to_backup())
         backup_dir_state = DirState(backup_dir)
         backup_dir_state.to_json(working_dir, dt=backup_datetime, fmt='{0}.state.{1}.json')
-        with tarfile.open(os.path.join(tmpdir, 'data.tar'), mode='w') as tarball:
+        with tarfile.open(os.path.join(working_dir, 'data.tar'), mode='w') as tarball:
             tarball.add(backup_dir.path)
-        zstd.compress(os.path.join(tmpdir, 'data.tar'), os.path.join(working_dir, 'data.tar.zst'))
-        with sigvault.SigVaultWriter(os.path.join(tmpdir, 'data.sigvault'), backup_dir.path) as sv:
+        with sigvault.open_vault(os.path.join(working_dir, 'data.tar'), 'w', backup_dir.path) as sv:
             for f in backup_dir.iterfiles():
                 sv.add(f)
 
@@ -67,7 +66,7 @@ def full_local_backup(config: Config, target_dir: str) -> tuple[str, str]:
                                  output=os.path.join(tmpdir, f'{timestamp}-full.tar.zst.gpg'))
         with open(os.path.join(tmpdir, f'{timestamp}-full.tar.zst.gpg'), 'rb') as f:
             hash_value = hashlib.md5(f.read()).hexdigest()
-        shutil.copy2(os.path.join(tmpdir, f'{timestamp}-full.tar.zst.gpg'), target_dir)
+        shutil.move(os.path.join(tmpdir, f'{timestamp}-full.tar.zst.gpg'), target_dir)
         return os.path.join(target_dir, f'{timestamp}-full.tar.zst.gpg'), hash_value
 
 
