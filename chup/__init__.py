@@ -42,12 +42,14 @@ def chup(config_path: str, full: bool, debug: str):
 
 
 def full_local_backup(config: Config, target_dir: str) -> tuple[str, str]:
+    log.info("Starting full backup.")
     with create_vault(target_dir, config.dir_to_backup(), config.password()) as new_vault:
         result = new_vault.result
     return result, hashlib.sha256(open(result, 'rb').read()).hexdigest()
 
 
 def incremental_local_backup(config: Config, target_dir: str, base_backup: str) -> tuple[str, str]:
+    log.info(f'Starting incremental backup from base vault file {base_backup}.')
     with increment_vault(target_dir, base_backup, config.password(), config.dir_to_backup()) as new_vault:
         result = new_vault.result
     return result, hashlib.sha256(open(result, 'rb').read()).hexdigest()

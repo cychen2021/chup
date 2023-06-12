@@ -8,6 +8,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Optional
 import os.path as op
 from datetime import datetime
+from chup import log
 
 import gnupg
 import pyrsync
@@ -68,6 +69,7 @@ class VaultWriter:
         return self.__vault_path
 
     def create(self, file: str):
+        log.info(f'Adding file {file} to vault {self.timestamp}')
         self.__data_tarball.add(op.join(self.__backup_dir, file),
                                 arcname=op.join(_VAULT_DATA_PREFIX, _VAULT_ADD_PREFIX, file))
         with open(op.join(self.__backup_dir, file), 'rb') as original_file, NamedTemporaryFile(mode='w+b') as sig_file:
@@ -76,6 +78,7 @@ class VaultWriter:
             self.__sigs[file] = sig_file.read()
 
     def update(self, file: str):
+        log.info(f'Updating file {file} in vault {self.timestamp}')
         with (open(op.join(self.__backup_dir, file), 'rb') as original_file,
               NamedTemporaryFile(mode='w+b') as delta_file,
               NamedTemporaryFile(mode='w+b') as new_sig_file,
@@ -91,9 +94,11 @@ class VaultWriter:
             self.__sigs[file] = new_sig_file.read()
 
     def delete(self, file: str):
+        log.info(f'Deleting file {file} from vault {self.timestamp}')
         self.__sigs.pop(file)
 
     def close(self):
+        log.info(f'Saving vault {self.timestamp}')
         metadata = {'timestamp': self.timestamp, 'type': self.__type.value,
                     'dir_name': self.__backup_dir.strip('/').split('/')[-1]}
         if self.__type == VaultType.INCREMENTAL:
@@ -149,7 +154,6 @@ class VaultReader:
         self.__tmp_dir_with_root = op.join(self.__tmp_dir.name, _VAULT_ROOT_PREFIX)
 
         self.__tarball.extract(op.join(_VAULT_ROOT_PREFIX, _VAULT_METADATA_FILE), path=self.__tmp_dir.name)
-        t = gnupg.GPG().decrypt_file(op.join(self.__tmp_dir_with_root, _VAULT_METADATA_FILE), passphrase=password)
         metadata = json.loads(str(gnupg.GPG().decrypt_file(op.join(self.__tmp_dir_with_root, _VAULT_METADATA_FILE),
                                                            passphrase=password)))
         self.__type = VaultType(metadata['type'])
@@ -213,12 +217,14 @@ class VaultReader:
 
 def create_vault(vault_dir: str, backup_dir: str, password: str) -> VaultWriter:
     result = VaultWriter(vault_dir, backup_dir, password)
+    log.info(f'Creating vault {result.timestamp} in {vault_dir}')
     for file in os.listdir(backup_dir):
         result.create(file)
     return result
 
 
 def open_vault(vault_file: str, password: str) -> VaultReader:
+    log.info(f'Opening vault file {vault_file}')
     return VaultReader(vault_file, password)
 
 
@@ -226,6 +232,7 @@ def increment_vault(vault_dir: str, last_vault_file: str, password: str, backup_
     with open_vault(op.join(vault_dir, last_vault_file), password) as last_vault:
         current_vault = VaultWriter(vault_dir, backup_dir, password,
                                     (last_vault_file, last_vault.hash_value, last_vault.sigs))
+        log.info(f'Creating updated vault {current_vault.timestamp} from {last_vault_file} in {vault_dir}')
         backup_dir = Dir(backup_dir)
         current_state = DirState(backup_dir)
         diff = current_state - last_vault.dir_state
