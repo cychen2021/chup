@@ -35,9 +35,11 @@ class VaultType(Enum):
 
 class VaultWriter:
     def __init__(self, vault_dir: str, backup_dir: str, password: str,
-                 previous_vault: Optional[tuple[str, str, dict[str, bytes]]] = None):
+                 previous_vault: Optional[tuple[str, str, dict[str, bytes]]] = None, name: str = None):
         self.__backup_dir = backup_dir
         self.__timestamp = datetime.utcnow()
+        if name is None:
+            self.__name = self.__timestamp.isoformat()
         self.__vault_path = op.join(vault_dir, f'{self.__timestamp.isoformat()}.tar')
         self.__tarball = TarFile.open(self.__vault_path, mode='w')
         self.__password = password
@@ -69,7 +71,7 @@ class VaultWriter:
         return self.__vault_path
 
     def create(self, file: str):
-        log.info(f'Adding file {file} to vault {self.timestamp}')
+        log.info(f'Adding file {file} to vault {self.name}')
         self.__data_tarball.add(op.join(self.__backup_dir, file),
                                 arcname=op.join(_VAULT_DATA_PREFIX, _VAULT_ADD_PREFIX, file))
         with open(op.join(self.__backup_dir, file), 'rb') as original_file, NamedTemporaryFile(mode='w+b') as sig_file:
@@ -77,8 +79,12 @@ class VaultWriter:
             sig_file.seek(0)
             self.__sigs[file] = sig_file.read()
 
+    @property
+    def name(self):
+        return self.__name
+
     def update(self, file: str):
-        log.info(f'Updating file {file} in vault {self.timestamp}')
+        log.info(f'Updating file {file} in vault {self.name}')
         with (open(op.join(self.__backup_dir, file), 'rb') as original_file,
               NamedTemporaryFile(mode='w+b') as delta_file,
               NamedTemporaryFile(mode='w+b') as new_sig_file,
@@ -94,12 +100,12 @@ class VaultWriter:
             self.__sigs[file] = new_sig_file.read()
 
     def delete(self, file: str):
-        log.info(f'Deleting file {file} from vault {self.timestamp}')
+        log.info(f'Deleting file {file} from vault {self.name}')
         self.__sigs.pop(file)
 
     def close(self):
-        log.info(f'Saving vault {self.timestamp}')
-        metadata = {'timestamp': self.timestamp, 'type': self.__type.value,
+        log.info(f'Saving vault {self.name}')
+        metadata = {'backup_name': self.name, 'timestamp': self.timestamp, 'type': self.__type.value,
                     'dir_name': self.__backup_dir.strip('/').split('/')[-1]}
         if self.__type == VaultType.INCREMENTAL:
             metadata['previous_vault'] = {'name': op.basename(self.__previous_vault_path),
@@ -159,6 +165,7 @@ class VaultReader:
         self.__type = VaultType(metadata['type'])
         self.__timestamp = datetime.fromisoformat(metadata['timestamp'])
         self.__dir_name = metadata['dir_name']
+        self.__name = metadata['backup_name']
 
         self.__tarball.extract(op.join(_VAULT_ROOT_PREFIX, _VAULT_SIG_FILE), path=self.__tmp_dir.name)
         sigs = json.loads(str(gnupg.GPG().decrypt_file(op.join(self.__tmp_dir_with_root, _VAULT_SIG_FILE),
@@ -186,6 +193,10 @@ class VaultReader:
     @property
     def timestamp(self) -> datetime:
         return self.__timestamp
+
+    @property
+    def name(self) -> str:
+        return self.__name
 
     @property
     def dir_name(self) -> str:
@@ -217,7 +228,7 @@ class VaultReader:
 
 def create_vault(vault_dir: str, backup_dir: str, password: str) -> VaultWriter:
     result = VaultWriter(vault_dir, backup_dir, password)
-    log.info(f'Creating vault {result.timestamp} in {vault_dir}')
+    log.info(f'Creating vault {result.name} in {vault_dir}')
     for file in os.listdir(backup_dir):
         result.create(file)
     return result
@@ -232,7 +243,7 @@ def increment_vault(vault_dir: str, last_vault_file: str, password: str, backup_
     with open_vault(op.join(vault_dir, last_vault_file), password) as last_vault:
         current_vault = VaultWriter(vault_dir, backup_dir, password,
                                     (last_vault_file, last_vault.hash_value, last_vault.sigs))
-        log.info(f'Creating updated vault {current_vault.timestamp} from {last_vault_file} in {vault_dir}')
+        log.info(f'Creating updated vault {current_vault.name} from {last_vault.name} in {vault_dir}')
         backup_dir = Dir(backup_dir)
         current_state = DirState(backup_dir)
         diff = current_state - last_vault.dir_state
