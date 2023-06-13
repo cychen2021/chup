@@ -118,7 +118,7 @@ class VaultWriter:
             metadata['previous_vault'] = {'file_name': op.basename(self.__previous_vault_path),
                                           'hash': self.__previous_vault_hash}
         with NamedTemporaryFile(mode='w+t') as metadata_file:
-            json.dump(metadata, metadata_file, indent=2)
+            json.dump(metadata, metadata_file)
             metadata_file.seek(0)
             with NamedTemporaryFile(mode='w+b') as tmp:
                 gnupg.GPG().encrypt(metadata_file.read(), recipients=None, passphrase=self.__password, output=tmp.name,
@@ -127,7 +127,7 @@ class VaultWriter:
                 self.__tarball.add(tmp.name, arcname=op.join(_VAULT_ROOT_PREFIX, _VAULT_METADATA_FILE))
 
         with NamedTemporaryFile(mode='w+t') as file_list_file:
-            json.dump(list(self.__file_list), file_list_file, indent=2)
+            json.dump(list(self.__file_list), file_list_file)
             file_list_file.seek(0)
             with NamedTemporaryFile(mode='w+b') as tmp:
                 gnupg.GPG().encrypt(file_list_file.read(), recipients=None, passphrase=self.__password, output=tmp.name,
@@ -137,7 +137,7 @@ class VaultWriter:
 
         sigs_list = [{'file': k, 'sig': base64.encodebytes(v).decode('ascii')} for k, v in self.__sigs.items()]
         with NamedTemporaryFile(mode='w+t') as sigs_file:
-            json.dump(sigs_list, sigs_file, indent=2)
+            json.dump(sigs_list, sigs_file)
             sigs_file.seek(0)
             with NamedTemporaryFile(mode='w+b') as tmp:
                 gnupg.GPG().encrypt(sigs_file.read(), recipients=None, passphrase=self.__password, output=tmp.name,
