@@ -1,5 +1,4 @@
 import base64
-import hashlib
 import json
 import os
 import shutil
@@ -14,6 +13,7 @@ import log
 import gnupg
 import pyrsync
 import zstd
+import utils
 from dirtools import Dir, DirState
 
 _DEFAULT_GPG_ALG = 'CAST5'
@@ -155,11 +155,17 @@ class VaultWriter:
                 self.__tarball.add(tmp.name, arcname=op.join(_VAULT_ROOT_PREFIX, _VAULT_STATE_FILE))
 
         self.__data_tarball.close()
+
+        log.info('Compressing data tarball')
         zstd.compress(self.__data_tarball.name, op.join(self.__tmp_dir.name, f'{_VAULT_DATA_PREFIX}.tar.zst'))
+
+        log.info('Encrypting data tarball')
         gnupg.GPG().encrypt_file(op.join(self.__tmp_dir.name, f'{_VAULT_DATA_PREFIX}.tar.zst'), recipients=None,
                                  passphrase=self.__password,
                                  output=op.join(self.__tmp_dir.name, f'{_VAULT_DATA_PREFIX}.tar.zst.gpg'),
                                  symmetric=_DEFAULT_GPG_ALG)
+
+        log.info('Adding data tarball to vault tarball')
         self.__tarball.add(op.join(self.__tmp_dir.name, f'{_VAULT_DATA_PREFIX}.tar.zst.gpg'),
                            arcname=op.join(_VAULT_ROOT_PREFIX, f'{_VAULT_DATA_PREFIX}.tar.zst.gpg'))
         self.__tarball.close()
@@ -168,8 +174,9 @@ class VaultWriter:
 
 class VaultReader:
     def __init__(self, vault_file: str, password: str):
+        log.info(f'Loading vault file {vault_file}')
         with open(vault_file, 'rb') as f:
-            self.__hash_value = hashlib.md5(f.read()).hexdigest()
+            self.__hash_value = utils.hash_file_sha256(f)
         self.__tarball = TarFile(vault_file, mode='r')
         self.__password = password
         self.__tmp_dir = TemporaryDirectory()
@@ -203,11 +210,14 @@ class VaultReader:
                                  output=op.join(self.__tmp_dir_with_root, 'state.json'), passphrase=password)
         self.__dir_state = DirState.from_json(op.join(self.__tmp_dir_with_root, 'state.json'))
 
+        log.info('Extracting data tarball')
         self.__tarball.extract(op.join(_VAULT_ROOT_PREFIX, f'{_VAULT_DATA_PREFIX}.tar.zst.gpg'),
                                path=self.__tmp_dir.name)
+        log.info('Decrypt data tarball')
         gnupg.GPG().decrypt_file(op.join(self.__tmp_dir_with_root, f'{_VAULT_DATA_PREFIX}.tar.zst.gpg'),
                                  output=op.join(self.__tmp_dir_with_root, f'{_VAULT_DATA_PREFIX}.tar.zst'),
                                  passphrase=password)
+        log.info('Decompress data tarball')
         zstd.decompress(op.join(self.__tmp_dir_with_root, f'{_VAULT_DATA_PREFIX}.tar.zst'),
                         op.join(self.__tmp_dir_with_root, f'{_VAULT_DATA_PREFIX}.tar'))
         self.__data_tarball = TarFile(op.join(self.__tmp_dir_with_root, f'{_VAULT_DATA_PREFIX}.tar'), mode='r')
