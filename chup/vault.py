@@ -285,8 +285,9 @@ class VaultReader:
 def create_vault(vault_dir: str, backup_dir: str, password: str) -> VaultWriter:
     result = VaultWriter(vault_dir, backup_dir, password)
     log.info(f'Creating vault {result.id} in {vault_dir}')
-    for file in os.listdir(backup_dir):
-        result.create(file)
+    for dirpath, _, filenames in os.walk(backup_dir):
+        for filename in filenames:
+            result.create(op.join(dirpath, filename))
     return result
 
 
