@@ -1,6 +1,6 @@
 # License of chup.dirtools
 
-Code of this package is modified from [dirtools2](https://github.com/otapi/dirtools2/) which uses the following MIT license:
+Code of this package is modified from [Dirtools2](https://github.com/otapi/dirtools2/) which uses the following MIT license:
 
 Copyright (c) 2020 Barnabás Nagy Copyright (c) 2013 Thomas Sileo
 
