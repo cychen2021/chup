@@ -3,13 +3,11 @@ import os
 import click as clk
 from typing import Any
 import tomllib as tl
-import logging
+import os.path as op
+import log
 
-from vault import create_vault, increment_vault
+from vault import create_vault, increment_vault, expand_vault
 from dirtools import Dir, DirState, compute_diff
-
-logging.basicConfig(level=logging.INFO)
-log = logging
 
 
 class Config:
@@ -28,11 +26,25 @@ class Config:
         return cls(data['backup']['dir_to_backup'], data['backup']['password'])
 
 
-@clk.command('chup', help="Chuyang Chen's incremental backup tool.")
+@clk.group('chup', help="Chuyang Chen's incremental backup tool.")
+def chup():
+    pass
+
+
+@chup.command('expand', help='Expand a vault.')
+@clk.option('--vault-dir', '-d', 'vault_dir', help='The directory to store the vault.', default='.')
+@clk.password_option(confirmation_prompt=False)
+@clk.argument('vault_to_expand', required=True)
+@clk.option('--output-dir', '-o', 'output_dir', help='The directory to dump the expanded files.', default='./output')
+def expand(vault_dir: str, vault_to_expand: str, password: str, output_dir: str):
+    expand_vault(vault_dir, vault_to_expand, password, output_dir)
+
+
+@chup.command('backup', help='Conduct cloud backup.')
 @clk.option('--config', '-c', 'config_path', help='The config file in TOML format.', default='/etc/chup.toml')
-@clk.option('--debug', 'debug', default = None)
+@clk.option('--debug', 'debug', default=None)
 @clk.option('--full', '-f', 'full', is_flag=True, help='Perform a full backup.')
-def chup(config_path: str, full: bool, debug: str):
+def backup(config_path: str, full: bool, debug: str):
     with open(config_path) as f:
         config = Config.from_dict(tl.loads(f.read()))
     if full:
@@ -56,7 +68,7 @@ def incremental_local_backup(config: Config, target_dir: str, base_backup: str) 
 
 
 def full_cloud_backup(config: Config):
-    filename, hash_value = full_local_backup(config, os.getcwd())
+    filename, hash_value = full_local_backup(config, op.join(os.getcwd(), 'test'))
 
 
 def incremental_cloud_backup(config: Config, debug: str = None):
